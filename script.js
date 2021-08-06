@@ -17,6 +17,8 @@ let dateBox;
 let clickedDate, clickedMonth, clickedYear;
 let clickedMonthNum;
 let eventName;
+let counterForPrevDays = 0;
+let prevLastDay;
 
 const months = [
   "Ocak",
@@ -34,6 +36,7 @@ const months = [
 ];
 
 const calcDate = function () {
+  counterForPrevDays = 0;
   date.setDate(1);
 
   // Bulunduğumuz ayın kaç gün sürdüğü
@@ -44,11 +47,7 @@ const calcDate = function () {
   ).getDate();
 
   // Bir önceki ayın kaç gün sürdüğü
-  const prevLastDay = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    0
-  ).getDate();
+  prevLastDay = new Date(date.getFullYear(), date.getMonth(), 0).getDate();
 
   // Son günün o ayda hangi güne denk geldiği
   const lastDayIndex = new Date(
@@ -77,6 +76,7 @@ const calcDate = function () {
 
   for (let j = firstDayStart - 1; j > 0; j--) {
     everyDay += `<div class="prev-date date">${prevLastDay - j + 1}</div>`;
+    counterForPrevDays++;
   }
 
   for (let i = 1; i <= lastDayOfMonth; i++) {
@@ -97,6 +97,7 @@ const calcDate = function () {
 
   // Günleri takvime atama
   days.innerHTML = everyDay;
+  clickedMonth = monthHeader.textContent.split(" ")[0];
 
   dateBox = document.querySelectorAll(".date");
   dateBox.forEach((dateBox) =>
@@ -107,6 +108,7 @@ const calcDate = function () {
       clickedYear = monthHeader.textContent.split(" ")[1];
     })
   );
+  readSQL(clickedMonth);
 };
 
 prevMonth.addEventListener("click", () => {
@@ -121,13 +123,18 @@ nextMonth.addEventListener("click", () => {
   calcDate();
 });
 
-btnToday.addEventListener("click", function () {
+const init = function () {
+  initFunc();
+  btnToday.addEventListener("click", function () {
+    initFunc();
+  });
+};
+
+const initFunc = function () {
   month.style.backgroundColor = "#118452";
   date = new Date();
   calcDate();
-});
-
-calcDate();
+};
 
 // --------------------------------------
 // --------- Buttons --------------------
@@ -135,42 +142,44 @@ calcDate();
 
 btnEkleme.addEventListener("click", function () {
   clickedMonthNum = months.findIndex((month) => month === clickedMonth);
-  eventName = eventBox.value;
+  if (eventBox.value) eventName = eventBox.value;
+  else return;
   eventBox.value = "";
 
-  document.querySelector(
-    ".clicked-date"
-  ).innerHTML += `<div class="event-name"><br>${eventName}</div>`;
+  const eventDiv = document.createElement("p");
+  eventDiv.classList.add("event-name");
+  eventDiv.textContent = eventName;
+  document.querySelector(".clicked-date")?.prepend(eventDiv);
+
+  coloringEventName();
 
   InsertSQL(clickedDate, clickedMonthNum + 1, clickedYear, eventName);
 
-  document
-    .querySelectorAll(".event-name")
-    .forEach((e) => (e.style.color = month.style.backgroundColor));
-  document.querySelector(".clicked-date").classList.remove("clicked-date");
+  document.querySelector(".clicked-date")?.classList.remove("clicked-date");
 });
 
 btnSilme.addEventListener("click", function () {
   clickedMonthNum = months.findIndex((month) => month === clickedMonth);
+  clickedDate =
+    document.querySelector(".clicked-date")?.childNodes[1]?.textContent;
 
-  document.querySelector(".clicked-date").lastElementChild.textContent = "";
-
+  clickCheckForNothing();
   deleteSQL(clickedDate, clickedMonthNum + 1, clickedYear);
 
-  document.querySelector(".clicked-date").classList.remove("clicked-date");
+  document.querySelector(".clicked-date")?.classList.remove("clicked-date");
 });
 
 btnGuncelleme.addEventListener("click", function () {
   clickedMonthNum = months.findIndex((month) => month === clickedMonth);
+  clickedDate =
+    document.querySelector(".clicked-date")?.childNodes[1]?.textContent;
   eventName = eventBox.value;
   eventBox.value = "";
 
-  document.querySelector(".clicked-date").lastElementChild.textContent =
-    eventName;
-
+  clickCheckForNothing(eventName);
   updateSQL(clickedDate, clickedMonthNum + 1, clickedYear, eventName);
 
-  document.querySelector(".clicked-date").classList.remove("clicked-date");
+  document.querySelector(".clicked-date")?.classList.remove("clicked-date");
 });
 
 // Random renk oluşturma
@@ -179,8 +188,14 @@ const randomInt = (min, max) =>
 const randomColor = () =>
   `rgba(${randomInt(0, 255)},${randomInt(0, 255)},${randomInt(0, 255)}, 0.7)`;
 
+const coloringEventName = function () {
+  document
+    .querySelectorAll(".event-name")
+    .forEach((e) => (e.style.color = month.style.backgroundColor));
+};
+
 ///////////////////////////////////////////////
-///////////////////////////////////////////////
+//////////////-----WebSQL------////////////////
 ///////////////////////////////////////////////
 
 var db = openDatabase("mydb", "1.0", "Test DB", 4 * 1024 * 1024);
@@ -207,9 +222,6 @@ const InsertSQL = function (clickedDate, clickedMonth, clickedYear, eventName) {
 const deleteSQL = function (clickedDate, clickedMonth, clickedYear) {
   db.transaction(function (tx) {
     tx.executeSql(
-      "CREATE TABLE IF NOT EXISTS Events_Table(day, month, year, event)"
-    );
-    tx.executeSql(
       "DELETE FROM Events_Table WHERE day=" +
         clickedDate +
         " AND month=" +
@@ -224,7 +236,7 @@ const updateSQL = function (clickedDate, clickedMonth, clickedYear, eventName) {
   db.transaction(function (tx) {
     tx.executeSql(
       "UPDATE Events_Table SET event=" +
-        eventName +
+        `"${eventName}"` +
         " WHERE day=" +
         clickedDate +
         " AND month=" +
@@ -234,3 +246,72 @@ const updateSQL = function (clickedDate, clickedMonth, clickedYear, eventName) {
     );
   });
 };
+
+const readSQL = function (clickedMonth) {
+  db.transaction(function (tx) {
+    clickedMonthNum = months.findIndex((month) => month === clickedMonth);
+    dateBox = document.querySelectorAll(".date");
+    let dayOfEvent;
+
+    tx.executeSql(
+      `SELECT * FROM Events_Table WHERE month=${clickedMonthNum + 1}`,
+      [],
+      function (tx, results) {
+        var len = results.rows.length;
+        for (let i = 0; i < len; i++) {
+          dayOfEvent =
+            Number(dateBox[results.rows[i].day].childNodes[0]?.textContent) -
+            1 +
+            counterForPrevDays;
+
+          if (dayOfEvent > prevLastDay) dayOfEvent -= prevLastDay;
+
+          if (
+            Number(
+              document.querySelector(
+                `body > div.container > div > div.days-container > div > div:nth-child(${
+                  dayOfEvent + counterForPrevDays
+                })`
+              )?.textContent
+            ) === dayOfEvent
+          ) {
+            const eventDivTag = document.createElement("p");
+            eventDivTag.classList.add("event-name");
+            eventDivTag.textContent = results.rows[i].event;
+
+            document
+              .querySelector(
+                `body > div.container > div > div.days-container > div > div:nth-child(${
+                  dayOfEvent + counterForPrevDays
+                })`
+              )
+              ?.prepend(eventDivTag);
+
+            coloringEventName();
+          }
+        }
+      },
+      null
+    );
+  });
+};
+
+const clickCheckForNothing = function (eventName = "") {
+  if (
+    document.querySelector(".clicked-date")?.firstElementChild !=
+    document.querySelector(".badge")
+  ) {
+    if (
+      document.querySelector(".clicked-date")?.lastElementChild ===
+      document.querySelector(".badge")
+    ) {
+      document.querySelector(".clicked-date").firstElementChild.textContent =
+        eventName;
+    } else if (document.querySelector(".clicked-date")?.firstElementChild) {
+      document.querySelector(".clicked-date").firstElementChild.textContent =
+        eventName;
+    }
+  }
+};
+
+init();

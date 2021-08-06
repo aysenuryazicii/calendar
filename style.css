@@ -88,7 +88,8 @@ h1 {
   width: calc(65rem / 7);
   height: 6rem;
   display: flex;
-  padding: 3px 0 0 5px;
+  justify-content: flex-end;
+  padding: 3px 5px 0 0;
   border: 1px solid rgb(121, 121, 121);
 }
 
